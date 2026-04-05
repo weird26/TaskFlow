@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}TaskFlow{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="screen-grid"></div>
+  <div class="screen-glow glow-one"></div>
+  <div class="screen-glow glow-two"></div>
+
+  <nav class="navbar">
+    <a href="{{ url_for('index') }}" class="nav-logo">
+      <span class="logo-mark">◈</span>
+      TaskFlow
+    </a>
+
+    <div class="nav-links">
+      {% if nav_user %}
+        <a href="{{ url_for('tasks') }}" class="nav-link">Tasks</a>
+        <a href="{{ url_for('leaderboard') }}" class="nav-link">Board</a>
+        <a href="{{ url_for('profile') }}" class="nav-link">Profile</a>
+        {% if nav_user.is_admin %}
+          <a href="{{ url_for('admin_dashboard') }}" class="nav-link">
+            Admin
+            {% if pending_approval_count %}
+              <span class="notification-count">{{ pending_approval_count }}</span>
+            {% endif %}
+          </a>
+        {% endif %}
+
+        <details class="notification-menu">
+          <summary class="notification-trigger">
+            <span>Notifications</span>
+            {% if notification_count %}
+              <span class="notification-count">{{ notification_count }}</span>
+            {% endif %}
+          </summary>
+          <div class="notification-dropdown">
+            <div class="notification-head">
+              <strong>Signal Feed</strong>
+              {% if nav_notifications %}
+              <form method="POST" action="{{ url_for('mark_notifications_read') }}">
+                <input type="hidden" name="notification_id" value="all" />
+                <input type="hidden" name="next" value="{{ request.path }}" />
+                <button type="submit" class="btn btn-ghost btn-sm">Mark all read</button>
+              </form>
+              {% endif %}
+            </div>
+
+            {% if nav_notifications %}
+              <div class="notification-list">
+                {% for note in nav_notifications %}
+                  <div class="notification-item {% if not note.read %}notification-item-unread{% endif %}">
+                    <div class="notification-badges">
+                      <span class="notification-kind notification-kind-{{ note.kind }}">{{ notification_types.get(note.kind, "Alert") }}</span>
+                      {% if not note.read %}
+                        <span class="notification-unread-dot"></span>
+                      {% endif %}
+                    </div>
+                    <a href="{{ note.link }}" class="notification-link">{{ note.message }}</a>
+                    <div class="notification-meta">
+                      <span>{{ note.created_at.strftime('%b %d, %I:%M %p') }}</span>
+                      {% if not note.read %}
+                        <form method="POST" action="{{ url_for('mark_notifications_read') }}">
+                          <input type="hidden" name="notification_id" value="{{ note._id }}" />
+                          <input type="hidden" name="next" value="{{ request.path }}" />
+                          <button type="submit" class="notification-mark">Mark read</button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="notification-empty">No notifications yet.</p>
+            {% endif %}
+          </div>
+        </details>
+
+        <div class="nav-user">
+          <span class="nav-status {% if nav_user.is_active %}nav-status-active{% else %}nav-status-inactive{% endif %}">
+            {{ "Active" if nav_user.is_active else "Inactive" }}
+          </span>
+          {% if nav_user.is_admin %}
+            <span class="nav-role">Admin</span>
+          {% endif %}
+          <span class="nav-username">{{ nav_user.username }}</span>
+          <a href="{{ url_for('logout') }}" class="btn btn-ghost btn-sm">Logout</a>
+        </div>
+      {% else %}
+        <a href="{{ url_for('login') }}" class="nav-link">Login</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">
+            <span>{{ message }}</span>
+            <button class="flash-close" onclick="this.parentElement.remove()">✕</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>TaskFlow &copy; {{ 2026 }}</span>
+    <span class="footer-sep">·</span>
+    <span>Futuristic task operations on Flask &amp; MongoDB</span>
+  </footer>
+
+  <script>
+    setTimeout(() => {
+      document.querySelectorAll('.flash').forEach((el) => el.remove());
+    }, 4500);
+  </script>
+</body>
+</html>

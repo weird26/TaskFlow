@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Admin Console — TaskFlow{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+  <div class="page-header">
+    <div>
+      <div class="section-kicker">Control Console</div>
+      <h1 class="page-title">Admin Dashboard</h1>
+      <p class="page-sub">Create users, control access, and manage account status from one place.</p>
+    </div>
+  </div>
+
+  <div class="admin-grid">
+    <section class="profile-section">
+      <h2 class="section-title">Create User</h2>
+      <form method="POST" action="{{ url_for('create_user') }}" class="profile-form">
+        <div class="form-group">
+          <label for="username">Display Name</label>
+          <input type="text" id="username" name="username" placeholder="e.g. Rohan" minlength="3" required />
+        </div>
+
+        <div class="form-group">
+          <label for="login_id">Permanent User ID</label>
+          <input type="text" id="login_id" name="login_id" placeholder="e.g. rohan_ops" minlength="3" required />
+        </div>
+
+        <div class="form-group">
+          <label for="temp_password">Initial Password</label>
+          <input type="password" id="temp_password" name="temp_password" placeholder="Minimum 6 characters" minlength="6" required />
+          <span class="form-hint">After the user changes this once, admin can no longer reset it.</span>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Create User</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="profile-section">
+      <h2 class="section-title">Managed Users</h2>
+      {% if managed_users %}
+        <div class="admin-list">
+          {% for managed in managed_users %}
+            <div class="admin-card admin-card-stack">
+              <div class="admin-card-main">
+                <strong>{{ managed.username }}</strong>
+                <span>User ID: {{ managed.login_id }}</span>
+                <span>
+                  {% if managed.is_disabled %}Disabled{% else %}Enabled{% endif %}
+                  ·
+                  {% if managed.is_active %}Available{% else %}Unavailable{% endif %}
+                </span>
+                <span>
+                  {% if managed.password_changed_by_user %}
+                    User changed password
+                  {% else %}
+                    Still using admin-issued password
+                  {% endif %}
+                </span>
+              </div>
+
+              <div class="admin-inline-actions">
+                {% if not managed.password_changed_by_user and not managed.is_disabled %}
+                  <form method="POST" action="{{ url_for('reset_user_password', user_id=managed._id) }}" class="admin-card-actions">
+                    <input type="password" name="temp_password" placeholder="Reset password" minlength="6" required />
+                    <button type="submit" class="btn btn-ghost btn-sm">Reset Password</button>
+                  </form>
+                {% else %}
+                  <div class="admin-lock-note">
+                    {% if managed.password_changed_by_user %}
+                      Password locked from admin reset
+                    {% else %}
+                      Account disabled
+                    {% endif %}
+                  </div>
+                {% endif %}
+
+                <div class="admin-control-row">
+                  {% if managed.is_disabled %}
+                    <form method="POST" action="{{ url_for('enable_user', user_id=managed._id) }}">
+                      <button type="submit" class="btn btn-outline btn-sm">Enable Login</button>
+                    </form>
+                  {% else %}
+                    <form method="POST" action="{{ url_for('disable_user', user_id=managed._id) }}">
+                      <button type="submit" class="btn btn-outline btn-sm">Disable Login</button>
+                    </form>
+                  {% endif %}
+
+                  <form method="POST" action="{{ url_for('delete_user', user_id=managed._id) }}" onsubmit="return confirm('Delete this user permanently?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete User</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <div class="empty-icon">◇</div>
+          <p>No managed users yet. Create the first one from this panel.</p>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

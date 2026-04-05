@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard — TaskFlow{% endblock %}
+
+{% block content %}
+<div class="lb-page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">🏆 Leaderboard</h1>
+      <p class="page-sub">Top contributors ranked by earned points</p>
+    </div>
+    {% if rank %}
+    <div class="my-rank-badge">
+      Your rank: <strong>#{{ rank }}</strong>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="lb-table-wrap">
+    <table class="lb-table">
+      <thead>
+        <tr>
+          <th class="lb-rank-col">Rank</th>
+          <th>Player</th>
+          <th class="lb-pts-col">Points</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in board %}
+        <tr class="lb-row {% if u._id|string == session.get('user_id') %}lb-me{% endif %}
+                          {% if loop.index == 1 %}lb-gold{% endif %}
+                          {% if loop.index == 2 %}lb-silver{% endif %}
+                          {% if loop.index == 3 %}lb-bronze{% endif %}">
+          <td class="lb-rank">
+            {% if loop.index == 1 %}🥇
+            {% elif loop.index == 2 %}🥈
+            {% elif loop.index == 3 %}🥉
+            {% else %}{{ loop.index }}
+            {% endif %}
+          </td>
+          <td class="lb-name">
+            {% if u.profile_picture_url %}
+            <img src="{{ u.profile_picture_url }}" alt="{{ u.username }} profile picture" class="lb-avatar-img" />
+            {% else %}
+            <div class="lb-avatar">{{ u.username[0]|upper }}</div>
+            {% endif %}
+            {{ u.username }}
+            <span class="lb-status {% if u.is_active %}lb-status-active{% else %}lb-status-inactive{% endif %}">
+              {{ "Active" if u.is_active else "Inactive" }}
+            </span>
+            {% if u._id|string == session.get('user_id') %}
+            <span class="lb-you-tag">You</span>
+            {% endif %}
+          </td>
+          <td class="lb-pts">
+            <span class="lb-pts-val">{{ u.points }}</span>
+            <span class="lb-pts-label">pts</span>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="3" class="lb-empty">No users yet. Be the first!</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="lb-cta">
+    <p>Want to climb the ranks?</p>
+    <a href="{{ url_for('tasks') }}" class="btn btn-primary">Browse Available Tasks</a>
+  </div>
+</div>
+{% endblock %}

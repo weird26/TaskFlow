@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Tasks — TaskFlow{% endblock %}
+
+{% block content %}
+<div class="tasks-page">
+  <div class="page-header">
+    <div>
+      <div class="section-kicker">Operations Board</div>
+      <h1 class="page-title">Task Board</h1>
+      <p class="page-sub">Track open signals, active operations, completed cases, and your own task postings.</p>
+    </div>
+    <a href="{{ url_for('new_task') }}" class="btn btn-primary">
+      <span>+</span> Post Task
+    </a>
+  </div>
+
+  <div class="tabs" id="taskTabs">
+    <button class="tab active" data-tab="available">
+      Available
+      <span class="tab-count">{{ available|length }}</span>
+    </button>
+    <button class="tab" data-tab="progress">
+      In Progress
+      <span class="tab-count">{{ in_progress|length }}</span>
+    </button>
+    <button class="tab" data-tab="completed">
+      Completed
+      <span class="tab-count">{{ completed|length }}</span>
+    </button>
+    <button class="tab" data-tab="posted">
+      My Posts
+      <span class="tab-count">{{ posted|length }}</span>
+    </button>
+  </div>
+
+  <div class="tab-panel active" id="tab-available">
+    {% if available %}
+      <div class="task-grid">
+        {% for task in available %}
+        <div class="task-card tc-open">
+          <div class="tc-top">
+            <span class="tc-points">{{ task.points }} pts</span>
+            <span class="tc-level">{{ task.level_meta.label }}</span>
+            <span class="tc-status status-open">Open</span>
+          </div>
+          <h3 class="tc-title">{{ task.title }}</h3>
+          <p class="tc-desc">{{ task.description }}</p>
+          {% if task.mentioned_users %}
+            <div class="tc-mentions">
+              {% for username in task.mentioned_users %}
+                <span>@{{ username }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+          <div class="tc-meta">
+            <span>By <strong>{{ task.giver_name }}</strong></span>
+            <span>{{ task.created_at.strftime('%b %d') }}</span>
+          </div>
+          <form method="POST" action="{{ url_for('take_task', task_id=task._id) }}">
+            <button class="btn btn-primary btn-full btn-sm">Take This Task</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">⌁</div>
+        <h3>No tasks available right now</h3>
+        <p>Check back later, or post a task yourself.</p>
+        <a href="{{ url_for('new_task') }}" class="btn btn-primary">Post a Task</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="tab-panel" id="tab-progress">
+    {% if in_progress %}
+      <div class="task-grid">
+        {% for task in in_progress %}
+        <div class="task-card tc-taken">
+          <div class="tc-top">
+            <span class="tc-points">{{ task.points }} pts</span>
+            <span class="tc-level">{{ task.level_meta.label }}</span>
+            <span class="tc-status status-taken">In Progress</span>
+          </div>
+          <h3 class="tc-title">{{ task.title }}</h3>
+          <p class="tc-desc">{{ task.description }}</p>
+          {% if task.mentioned_users %}
+            <div class="tc-mentions">
+              {% for username in task.mentioned_users %}
+                <span>@{{ username }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+          <div class="tc-meta">
+            <span>Posted by <strong>{{ task.giver_name }}</strong></span>
+            <span>{{ task.updated_at.strftime('%b %d') }}</span>
+          </div>
+          <form method="POST" action="{{ url_for('complete_task', task_id=task._id) }}">
+            <button class="btn btn-success btn-full btn-sm">Mark as Complete</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">⟁</div>
+        <h3>No tasks in progress</h3>
+        <p>Tasks move here only while you are actively working on them.</p>
+        <button class="btn btn-outline" onclick="switchTab('available')">Browse Tasks</button>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="tab-panel" id="tab-completed">
+    {% if completed %}
+      <div class="task-grid">
+        {% for task in completed %}
+        <div class="task-card tc-completed">
+          <div class="tc-top">
+            <span class="tc-points">{{ task.points }} pts</span>
+            <span class="tc-level">{{ task.level_meta.label }}</span>
+            <span class="tc-status status-completed">Completed</span>
+          </div>
+          <h3 class="tc-title">{{ task.title }}</h3>
+          <p class="tc-desc">{{ task.description }}</p>
+          <div class="tc-meta">
+            <span>Posted by <strong>{{ task.giver_name }}</strong></span>
+            <span>{{ task.updated_at.strftime('%b %d') }}</span>
+          </div>
+          <div class="tc-done-badge">Completed — {{ task.points }} pts earned</div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">◎</div>
+        <h3>No completed tasks yet</h3>
+        <p>Finished tasks will appear here instead of staying under in progress.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="tab-panel" id="tab-posted">
+    {% if posted %}
+      <div class="task-grid">
+        {% for task in posted %}
+        <div class="task-card tc-posted">
+          <div class="tc-top">
+            <span class="tc-points">{{ task.points }} pts</span>
+            <span class="tc-level">{{ task.level_meta.label }}</span>
+            <span class="tc-status status-{{ task.status }}">
+              {% if task.status == 'open' %}Open{% elif task.status == 'taken' %}Assigned{% elif task.status == 'completed' %}Done{% endif %}
+            </span>
+          </div>
+          <h3 class="tc-title">{{ task.title }}</h3>
+          <p class="tc-desc">{{ task.description }}</p>
+          {% if task.mentioned_users %}
+            <div class="tc-mentions">
+              {% for username in task.mentioned_users %}
+                <span>@{{ username }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+          <div class="tc-meta">
+            {% if task.status == 'taken' or task.status == 'completed' %}
+              <span>Taken by <strong>{{ task.taker_name }}</strong></span>
+            {% else %}
+              <span>Waiting for taker</span>
+            {% endif %}
+            <span>{{ task.created_at.strftime('%b %d') }}</span>
+          </div>
+          {% if task.status == 'open' %}
+          <form method="POST" action="{{ url_for('delete_task', task_id=task._id) }}" onsubmit="return confirm('Delete this task?')">
+            <button class="btn btn-danger btn-full btn-sm">Delete Task</button>
+          </form>
+          {% elif task.status == 'completed' %}
+          <div class="tc-done-badge">Completed by {{ task.taker_name }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">◇</div>
+        <h3>You haven't posted any tasks</h3>
+        <p>Need something done? Post a task and let others help.</p>
+        <a href="{{ url_for('new_task') }}" class="btn btn-primary">Post a Task</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((tab) => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
+    document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+    document.getElementById(`tab-${name}`).classList.add('active');
+  }
+
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+</script>
+{% endblock %}

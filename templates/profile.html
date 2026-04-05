@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Profile — TaskFlow{% endblock %}
+
+{% block content %}
+<div class="profile-page">
+  {% if user.is_admin %}
+    <div class="admin-identity-banner">
+      <strong>Admin Access Active</strong>
+      <span>You are signed in as an administrator and can open the admin console to approve users and issue credentials.</span>
+    </div>
+  {% endif %}
+
+  <div class="profile-hero">
+    {% if user.profile_picture_url %}
+      <img src="{{ user.profile_picture_url }}" alt="{{ user.username }} profile picture" class="profile-avatar-image" />
+    {% else %}
+      <div class="profile-avatar">{{ user.username[0]|upper }}</div>
+    {% endif %}
+
+    <div class="profile-info">
+      <div class="section-kicker">Identity Record</div>
+      <h1 class="profile-name">{{ user.username }}</h1>
+      <p class="profile-since">Member since {{ user.created_at.strftime('%B %Y') }}</p>
+      <div class="profile-meta-row">
+        <span class="profile-pill">Permanent User ID: {{ user.login_id }}</span>
+        <span class="profile-pill {% if user.is_active %}profile-pill-active{% else %}profile-pill-inactive{% endif %}">
+          {{ "Active" if user.is_active else "Inactive" }}
+        </span>
+      </div>
+      {% if user.profile_description %}
+        <p class="profile-description">{{ user.profile_description }}</p>
+      {% else %}
+        <p class="profile-description profile-description-empty">Add a short operative description so teammates know your strengths.</p>
+      {% endif %}
+    </div>
+
+    <div class="profile-points-badge">
+      <div class="ppb-number">{{ user.points }}</div>
+      <div class="ppb-label">Total Points</div>
+    </div>
+  </div>
+
+  <div class="profile-stats">
+    <div class="pstat">
+      <div class="pstat-n">{{ total_posted }}</div>
+      <div class="pstat-l">Tasks Posted</div>
+    </div>
+    <div class="pstat">
+      <div class="pstat-n">{{ total_completed }}</div>
+      <div class="pstat-l">Tasks Completed</div>
+    </div>
+    <div class="pstat">
+      <div class="pstat-n">{{ total_open }}</div>
+      <div class="pstat-l">Open Tasks</div>
+    </div>
+  </div>
+
+  <div class="profile-layout">
+    <section class="profile-section">
+      <h2 class="section-title">Edit Profile</h2>
+      <form method="POST" action="{{ url_for('profile') }}" class="profile-form">
+        <div class="form-group">
+          <label for="username">Display Name</label>
+          <input type="text" id="username" name="username" value="{{ user.username }}" minlength="3" required />
+          <span class="form-hint">Your permanent user ID stays fixed as <strong>{{ user.login_id }}</strong>.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="profile_picture_url">Profile Picture URL</label>
+          <input
+            type="url"
+            id="profile_picture_url"
+            name="profile_picture_url"
+            value="{{ user.profile_picture_url }}"
+            placeholder="https://example.com/photo.jpg"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="profile_description">Profile Description</label>
+          <textarea
+            id="profile_description"
+            name="profile_description"
+            rows="4"
+            maxlength="300"
+            placeholder="Tell the team what you investigate, build, or solve best."
+          >{{ user.profile_description }}</textarea>
+        </div>
+
+        <div class="switch-panel">
+          <div>
+            <strong>Availability Signal</strong>
+            <small>Turn this off if you do not want mentions or new-task alerts.</small>
+          </div>
+          <label class="switch">
+            <input type="checkbox" name="is_active" {% if user.is_active %}checked{% endif %} />
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="task-form-grid">
+          <div class="form-group">
+            <label for="new_password">Change Password</label>
+            <input type="password" id="new_password" name="new_password" placeholder="Leave blank to keep current password" minlength="6" />
+          </div>
+
+          <div class="form-group">
+            <label for="confirm_password">Confirm Password</label>
+            <input type="password" id="confirm_password" name="confirm_password" placeholder="Repeat the new password" minlength="6" />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save Profile</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="profile-section">
+      <h2 class="section-title">Completed Tasks</h2>
+      {% if completed_tasks %}
+        <div class="completed-list">
+          {% for task in completed_tasks %}
+          <div class="completed-item">
+            <div class="ci-info">
+              <strong>{{ task.title }}</strong>
+              <span>Posted by {{ task.giver_name }} · {{ task.updated_at.strftime('%b %d, %Y') }}</span>
+            </div>
+            <div class="ci-pts">+{{ task.points }} pts</div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <div class="empty-icon">⌁</div>
+          <p>No completed tasks yet. <a href="{{ url_for('tasks') }}">Find a task to tackle.</a></p>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

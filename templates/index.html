@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}TaskFlow — Get things done{% endblock %}
+
+{% block content %}
+{% if session.get('user_id') %}
+<!-- ── DASHBOARD ── -->
+<section class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="display-heading"> Good Day,<br><em>{{ session.username }}</em></h1>
+    <a href="{{ url_for('new_task') }}" class="btn btn-primary btn-lg">
+      <span>+</span> Post a Task
+    </a>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card stat-blue">
+      <div class="stat-icon">📋</div>
+      <div class="stat-number">{{ stats.posted }}</div>
+      <div class="stat-label">Tasks Posted</div>
+    </div>
+    <div class="stat-card stat-amber">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-number">{{ stats.taken }}</div>
+      <div class="stat-label">Tasks Taken</div>
+    </div>
+    <div class="stat-card stat-green">
+      <div class="stat-icon">✅</div>
+      <div class="stat-number">{{ stats.completed }}</div>
+      <div class="stat-label">Completed</div>
+    </div>
+    <div class="stat-card stat-purple">
+      <div class="stat-icon">🔓</div>
+      <div class="stat-number">{{ stats.available }}</div>
+      <div class="stat-label">Available</div>
+    </div>
+  </div>
+
+  <div class="quick-actions">
+    <a href="{{ url_for('tasks') }}" class="quick-card">
+      <div class="qc-icon">🗂</div>
+      <div class="qc-text">
+        <strong>Browse Tasks</strong>
+        <span>Find work to pick up</span>
+      </div>
+    </a>
+    <a href="{{ url_for('new_task') }}" class="quick-card">
+      <div class="qc-icon">✍️</div>
+      <div class="qc-text">
+        <strong>Post a Task</strong>
+        <span>Delegate to others</span>
+      </div>
+    </a>
+    <a href="{{ url_for('leaderboard') }}" class="quick-card">
+      <div class="qc-icon">🏆</div>
+      <div class="qc-text">
+        <strong>Leaderboard</strong>
+        <span>See top earners</span>
+      </div>
+    </a>
+    <a href="{{ url_for('profile') }}" class="quick-card">
+      <div class="qc-icon">👤</div>
+      <div class="qc-text">
+        <strong>My Profile</strong>
+        <span>Identity, status, and password</span>
+      </div>
+    </a>
+    {% if nav_user and nav_user.is_admin %}
+    <a href="{{ url_for('admin_dashboard') }}" class="quick-card">
+      <div class="qc-icon">🛡</div>
+      <div class="qc-text">
+        <strong>Admin Console</strong>
+        <span>Approve users and issue credentials</span>
+      </div>
+    </a>
+    {% endif %}
+  </div>
+</section>
+
+{% else %}
+<!-- ── LANDING ── -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">✦ Investigative Task Network</div>
+    <h1 class="hero-heading">
+      Build momentum.<br>
+      Finish stronger.<br>
+      <em>Win together.</em>
+    </h1>
+    <p class="hero-sub">
+      TaskFlow helps focused teams turn effort into progress with admin-managed access,
+      clear accountability, energetic collaboration, and points earned for real results.
+    </p>
+    <div class="hero-cta">
+      <a href="{{ url_for('login') }}" class="btn btn-outline btn-lg">Sign In</a>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <div class="hero-card hc1">
+      <span class="hc-pts">+50 pts</span>
+      <strong>Fix login bug</strong>
+      <span class="hc-tag">Dev</span>
+    </div>
+    <div class="hero-card hc2">
+      <span class="hc-pts">+120 pts</span>
+      <strong>Design logo</strong>
+      <span class="hc-tag">Design</span>
+    </div>
+    <div class="hero-card hc3">
+      <span class="hc-pts">+30 pts</span>
+      <strong>Write docs</strong>
+      <span class="hc-tag">Writing</span>
+    </div>
+    <div class="hero-orb"></div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="feature">
+    <div class="feature-num">01</div>
+    <h3>Move with purpose</h3>
+    <p>Create meaningful tasks, direct attention where it matters, and keep your team aligned around outcomes.</p>
+  </div>
+  <div class="feature">
+    <div class="feature-num">02</div>
+    <h3>Finish with pride</h3>
+    <p>Take ownership, complete work cleanly, and watch each finished mission build visible momentum.</p>
+  </div>
+  <div class="feature">
+    <div class="feature-num">03</div>
+    <h3>Grow real trust</h3>
+    <p>Every completed task strengthens your reputation and shows the team you can be counted on.</p>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

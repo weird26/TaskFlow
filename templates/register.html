@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Access Request — TaskFlow{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo">◈</div>
+      {% if first_admin_setup %}
+        <h1>Create admin account</h1>
+        <p>Bootstrap the first control account for this workspace.</p>
+      {% else %}
+        <h1>Request access</h1>
+        <p>Send your permanent user ID request for admin approval.</p>
+      {% endif %}
+    </div>
+
+    <form method="POST" action="{{ url_for('register') }}" class="auth-form">
+      <div class="form-group">
+        <label for="username">Display Name</label>
+        <input
+          type="text"
+          id="username"
+          name="username"
+          placeholder="choose_a_name"
+          autocomplete="nickname"
+          minlength="3"
+          required
+        />
+        <span class="form-hint">You can change this later anytime.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="login_id">Permanent User ID</label>
+        <input
+          type="text"
+          id="login_id"
+          name="login_id"
+          placeholder="permanent_user_id"
+          autocomplete="username"
+          minlength="3"
+          required
+        />
+        <span class="form-hint">This ID is permanent and used for sign in.</span>
+      </div>
+
+      {% if first_admin_setup %}
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="••••••••"
+            autocomplete="new-password"
+            minlength="6"
+            required
+          />
+          <span class="form-hint">At least 6 characters</span>
+        </div>
+
+        <div class="form-group">
+          <label for="confirm">Confirm Password</label>
+          <input
+            type="password"
+            id="confirm"
+            name="confirm"
+            placeholder="••••••••"
+            autocomplete="new-password"
+            required
+          />
+        </div>
+      {% else %}
+        <div class="auth-note">
+          <strong>Approval flow</strong>
+          <span>Admin will approve your request and provide the first password. After approval, you can change your password from your profile.</span>
+        </div>
+      {% endif %}
+
+      <button type="submit" class="btn btn-primary btn-full">
+        {% if first_admin_setup %}Create Admin Account{% else %}Send Access Request{% endif %}
+      </button>
+    </form>
+
+    <p class="auth-footer">
+      Already have credentials?
+      <a href="{{ url_for('login') }}">Sign in</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

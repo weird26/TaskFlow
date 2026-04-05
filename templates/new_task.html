@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Post a Task — TaskFlow{% endblock %}
+
+{% block content %}
+<div class="form-page">
+  <div class="form-card">
+    <div class="form-card-header">
+      <a href="{{ url_for('tasks') }}" class="back-link">← Back to tasks</a>
+      <h1>Post a New Task</h1>
+      <p>Choose the task level, fixed reward, and optionally mention an active teammate.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('new_task') }}" class="task-form">
+      <div class="form-group">
+        <label for="title">Task Title <span class="required">*</span></label>
+        <input
+          type="text"
+          id="title"
+          name="title"
+          placeholder="e.g. Fix CSS layout bug on mobile"
+          maxlength="120"
+          value="{{ form_data.get('title', '') }}"
+          required
+        />
+        <span class="form-hint">Keep it short and clear (max 120 chars)</span>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description <span class="required">*</span></label>
+        <textarea
+          id="description"
+          name="description"
+          rows="5"
+          placeholder="Explain exactly what needs to be done, any requirements, and how to verify completion..."
+          maxlength="1000"
+          required
+        >{{ form_data.get('description', '') }}</textarea>
+        <span class="form-hint">Be specific so the right person can pick it up fast</span>
+      </div>
+
+      <div class="task-form-grid">
+        <div class="form-group">
+          <label for="level">Task Level <span class="required">*</span></label>
+          <select id="level" name="level" required>
+            {% set selected_level = form_data.get('level', 'medium') %}
+            {% for key, meta in task_levels.items() %}
+              <option value="{{ key }}" {% if selected_level == key %}selected{% endif %}>
+                {{ meta.label }} — {{ meta.points }} pts
+              </option>
+            {% endfor %}
+          </select>
+          <span class="form-hint">Points are fixed by level</span>
+        </div>
+
+        <div class="form-group">
+          <label for="mentioned_user_id">Mention Active User</label>
+          <select id="mentioned_user_id" name="mentioned_user_id">
+            <option value="">No mention</option>
+            {% set selected_user = form_data.get('mentioned_user_id', '') %}
+            {% for candidate in mention_candidates %}
+              <option value="{{ candidate._id }}" {% if selected_user == candidate._id|string %}selected{% endif %}>
+                @{{ candidate.username }}{% if candidate.login_id %} ({{ candidate.login_id }}){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <span class="form-hint">Only active users appear here and will receive a targeted notification</span>
+        </div>
+      </div>
+
+      <div class="task-level-preview">
+        {% for key, meta in task_levels.items() %}
+          <div class="level-chip" data-level-card="{{ key }}">
+            <strong>{{ meta.label }}</strong>
+            <span>{{ meta.points }} pts fixed reward</span>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="form-actions">
+        <a href="{{ url_for('tasks') }}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-primary">Post Task →</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tips-panel">
+    <h3>💡 Better task posting</h3>
+    <ul>
+      <li>Use low for quick wins and critical for urgent work.</li>
+      <li>Mention a teammate when you already know who should notice it.</li>
+      <li>All active users get a notification when a new task is posted.</li>
+      <li>State the expected output so completion is easy to verify.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  const levelSelect = document.getElementById('level');
+  const levelCards = document.querySelectorAll('[data-level-card]');
+
+  function syncLevelPreview() {
+    levelCards.forEach((card) => {
+      card.classList.toggle('level-chip-active', card.dataset.levelCard === levelSelect.value);
+    });
+  }
+
+  levelSelect.addEventListener('change', syncLevelPreview);
+  syncLevelPreview();
+</script>
+{% endblock %}

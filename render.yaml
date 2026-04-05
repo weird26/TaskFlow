@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: taskflow
+    runtime: python
+    plan: free
+    autoDeploy: false
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: DEFAULT_ADMIN_LOGIN_ID
+        sync: false
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: DEFAULT_ADMIN_USERNAME
+        sync: false
