@@ -5,6 +5,9 @@ import re
 
 import certifi
 from dotenv import load_dotenv
+import os
+
+
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
@@ -18,7 +21,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
-MONGO_URI = os.environ.get("MONGO_URI", "").strip()
+MONGO_URI = os.getenv("MONGO_URI")
+print("DEBUG MONGO_URI =", MONGO_URI)
 
 if not MONGO_URI:
     raise RuntimeError("MONGO_URI is missing. Add your MongoDB Atlas connection string to .env.")
