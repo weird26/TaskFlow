@@ -166,9 +166,12 @@ def bootstrap_existing_users():
     )
 
     admin_user = ensure_user_defaults(users_col.find_one({"login_id": DEFAULT_ADMIN_LOGIN_ID}))
+    if not admin_user:
+        admin_user = ensure_user_defaults(users_col.find_one({"username": DEFAULT_ADMIN_USERNAME}))
     if admin_user:
         update_fields = {
             "username": DEFAULT_ADMIN_USERNAME,
+            "login_id": DEFAULT_ADMIN_LOGIN_ID,
             "is_admin": True,
             "is_approved": True,
             "is_disabled": False,
