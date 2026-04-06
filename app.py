@@ -182,6 +182,7 @@ def bootstrap_existing_users():
             {"_id": admin_user["_id"]},
             {"$set": update_fields},
         )
+        print(f"Admin login reset for: {DEFAULT_ADMIN_LOGIN_ID}")
     else:
         users_col.insert_one(
             {
@@ -200,6 +201,7 @@ def bootstrap_existing_users():
                 "created_at": datetime.utcnow(),
             }
         )
+        print(f"Admin account created for: {DEFAULT_ADMIN_LOGIN_ID}")
 
 
 bootstrap_existing_users()
@@ -411,9 +413,11 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        login_id = request.form.get("login_id", "").strip()
+        login_input = request.form.get("login_id", "").strip()
         password = request.form.get("password", "")
-        user = ensure_user_defaults(users_col.find_one({"login_id": login_id}))
+        user = ensure_user_defaults(users_col.find_one({"login_id": login_input}))
+        if not user:
+            user = ensure_user_defaults(users_col.find_one({"username": login_input}))
 
         if not user:
             flash("Invalid user ID or password.", "error")
