@@ -175,9 +175,9 @@ def bootstrap_existing_users():
             "is_admin": True,
             "is_approved": True,
             "is_disabled": False,
+            "password_hash": generate_password_hash(DEFAULT_ADMIN_PASSWORD),
+            "password_changed_by_user": False,
         }
-        if not admin_user.get("password_changed_by_user"):
-            update_fields["password_hash"] = generate_password_hash(DEFAULT_ADMIN_PASSWORD)
         users_col.update_one(
             {"_id": admin_user["_id"]},
             {"$set": update_fields},
