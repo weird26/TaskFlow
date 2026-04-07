@@ -20,3 +20,5 @@ services:
         sync: false
       - key: RESET_ADMIN_PASSWORD_ON_BOOT
         value: "0"
+      - key: DEBUG_ADMIN_TOKEN
+        sync: false

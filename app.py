@@ -12,7 +12,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 from bson.errors import InvalidId
 from bson.objectid import ObjectId
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -53,11 +53,13 @@ DEFAULT_ADMIN_LOGIN_ID = os.environ.get("DEFAULT_ADMIN_LOGIN_ID", "").strip()
 DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", "").strip()
 DEFAULT_ADMIN_USERNAME = os.environ.get("DEFAULT_ADMIN_USERNAME", "Akay Admin").strip()
 RESET_ADMIN_PASSWORD_ON_BOOT = os.environ.get("RESET_ADMIN_PASSWORD_ON_BOOT", "0").strip() == "1"
+DEBUG_ADMIN_TOKEN = os.environ.get("DEBUG_ADMIN_TOKEN", "").strip()
 TASK_LEVELS = {
     "low": {"label": "Low", "points": 25},
     "medium": {"label": "Medium", "points": 50},
     "high": {"label": "High", "points": 100},
-    "critical": {"label": "Critical", "points": 200},
+    "critical": {"label": "Critical", "points": 150},
+    "very_critical": {"label": "Critical", "points": 200},
 }
 NOTIFICATION_TYPES = {
     "task": "New Task",
@@ -159,6 +161,12 @@ def bootstrap_existing_users():
             "DEFAULT_ADMIN_LOGIN_ID and DEFAULT_ADMIN_PASSWORD must be set in the environment."
         )
 
+    app.logger.info(
+        "Bootstrapping admin account for login_id=%s reset_on_boot=%s",
+        DEFAULT_ADMIN_LOGIN_ID,
+        RESET_ADMIN_PASSWORD_ON_BOOT,
+    )
+
     users_col.update_many(
         {"login_id": {"$ne": DEFAULT_ADMIN_LOGIN_ID}},
         {"$set": {"is_admin": False}},
@@ -182,9 +190,10 @@ def bootstrap_existing_users():
             {"_id": admin_user["_id"]},
             {"$set": update_fields},
         )
-        print(
-            "Admin account synced for:"
-            f" {DEFAULT_ADMIN_LOGIN_ID} (password_reset={'yes' if 'password_hash' in update_fields else 'no'})"
+        app.logger.info(
+            "Admin account synced for login_id=%s password_reset=%s",
+            DEFAULT_ADMIN_LOGIN_ID,
+            "password_hash" in update_fields,
         )
     else:
         users_col.insert_one(
@@ -204,7 +213,7 @@ def bootstrap_existing_users():
                 "created_at": datetime.utcnow(),
             }
         )
-        print(f"Admin account created for: {DEFAULT_ADMIN_LOGIN_ID}")
+        app.logger.info("Admin account created for login_id=%s", DEFAULT_ADMIN_LOGIN_ID)
 
 
 bootstrap_existing_users()
@@ -217,6 +226,8 @@ def current_user():
         return None
     user = users_col.find_one({"_id": object_id})
     return ensure_user_defaults(user)
+
+
 def active_users(exclude_user_id=None):
     query = {"is_active": True, "is_approved": True, "is_disabled": False}
     if exclude_user_id:
@@ -235,6 +246,45 @@ def active_users(exclude_user_id=None):
         ).sort("username", 1)
     )
     return [merged_user_defaults(user) for user in users]
+
+
+@app.route("/debug-admin", methods=["GET"])
+def debug_admin():
+    provided_token = request.args.get("token", "").strip()
+    if not DEBUG_ADMIN_TOKEN or provided_token != DEBUG_ADMIN_TOKEN:
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+
+    admin_by_login = ensure_user_defaults(users_col.find_one({"login_id": DEFAULT_ADMIN_LOGIN_ID}))
+    admin_by_username = ensure_user_defaults(users_col.find_one({"username": DEFAULT_ADMIN_USERNAME}))
+    admin_user = admin_by_login or admin_by_username
+
+    if admin_user:
+        response = {
+            "ok": True,
+            "admin_exists": True,
+            "matched_by": "login_id" if admin_by_login else "username",
+            "env_default_admin_login_id": DEFAULT_ADMIN_LOGIN_ID,
+            "env_default_admin_username": DEFAULT_ADMIN_USERNAME,
+            "stored_user_id": str(admin_user["_id"]),
+            "stored_login_id": admin_user.get("login_id"),
+            "stored_username": admin_user.get("username"),
+            "is_admin": admin_user.get("is_admin", False),
+            "is_approved": admin_user.get("is_approved", False),
+            "is_disabled": admin_user.get("is_disabled", False),
+            "has_password_hash": bool(admin_user.get("password_hash")),
+            "password_changed_by_user": admin_user.get("password_changed_by_user", False),
+            "reset_admin_password_on_boot": RESET_ADMIN_PASSWORD_ON_BOOT,
+        }
+    else:
+        response = {
+            "ok": True,
+            "admin_exists": False,
+            "env_default_admin_login_id": DEFAULT_ADMIN_LOGIN_ID,
+            "env_default_admin_username": DEFAULT_ADMIN_USERNAME,
+            "reset_admin_password_on_boot": RESET_ADMIN_PASSWORD_ON_BOOT,
+        }
+
+    return jsonify(response)
 
 
 def recent_notifications_for(user_id, limit=8):
@@ -423,16 +473,43 @@ def login():
             user = ensure_user_defaults(users_col.find_one({"username": login_input}))
 
         if not user:
+            app.logger.warning("Login failed for input=%s reason=user_not_found", login_input)
             flash("Invalid user ID or password.", "error")
         elif user.get("is_disabled"):
+            app.logger.warning(
+                "Login blocked for input=%s user_id=%s reason=disabled",
+                login_input,
+                user.get("_id"),
+            )
             flash("This account is disabled. Contact admin.", "error")
         elif not user.get("is_approved"):
+            app.logger.warning(
+                "Login blocked for input=%s user_id=%s reason=not_approved",
+                login_input,
+                user.get("_id"),
+            )
             flash("Your account is still waiting for admin approval.", "warning")
         elif not user.get("password_hash"):
+            app.logger.warning(
+                "Login blocked for input=%s user_id=%s reason=no_password_hash",
+                login_input,
+                user.get("_id"),
+            )
             flash("Admin has not issued your login password yet.", "warning")
         elif not check_password_hash(user["password_hash"], password):
+            app.logger.warning(
+                "Login failed for input=%s user_id=%s reason=password_mismatch",
+                login_input,
+                user.get("_id"),
+            )
             flash("Invalid user ID or password.", "error")
         else:
+            app.logger.info(
+                "Login succeeded for input=%s user_id=%s is_admin=%s",
+                login_input,
+                user.get("_id"),
+                user.get("is_admin", False),
+            )
             session["user_id"] = str(user["_id"])
             session["username"] = user["username"]
             session["login_id"] = user["login_id"]

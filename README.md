@@ -22,3 +22,9 @@ On Render, these values must match the credentials you use to sign in.
 By default, the app now keeps the existing admin password on restart. If you want Render to force-reset the admin password from the environment on the next deploy, set:
 
 - `RESET_ADMIN_PASSWORD_ON_BOOT=1`
+
+For production troubleshooting, you can also set:
+
+- `DEBUG_ADMIN_TOKEN`
+
+Then open `/debug-admin?token=YOUR_TOKEN` on the deployed app to inspect whether the admin account exists and whether it has a password hash. The endpoint does not reveal the password or hash value.
