@@ -15,6 +15,7 @@ from bson.objectid import ObjectId
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
+from pymongo.collation import Collation
 from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
@@ -129,6 +130,33 @@ def ensure_user_defaults(user):
         users_col.update_one({"_id": user["_id"]}, {"$set": missing_fields})
         user.update(missing_fields)
     return user
+
+
+def find_user_by_identity(identity):
+    cleaned = (identity or "").strip()
+    if not cleaned:
+        return None
+
+    user = ensure_user_defaults(users_col.find_one({"login_id": cleaned}))
+    if user:
+        return user
+
+    user = ensure_user_defaults(users_col.find_one({"username": cleaned}))
+    if user:
+        return user
+
+    # Fall back to case-insensitive exact matching for deployments that already
+    # contain differently cased identifiers.
+    identity_collation = Collation(locale="en", strength=2)
+    user = ensure_user_defaults(
+        users_col.find_one({"login_id": cleaned}, collation=identity_collation)
+    )
+    if user:
+        return user
+
+    return ensure_user_defaults(
+        users_col.find_one({"username": cleaned}, collation=identity_collation)
+    )
 
 
 def bootstrap_existing_users():
@@ -273,6 +301,13 @@ def debug_admin():
             "is_disabled": admin_user.get("is_disabled", False),
             "has_password_hash": bool(admin_user.get("password_hash")),
             "password_changed_by_user": admin_user.get("password_changed_by_user", False),
+            "env_password_present": bool(DEFAULT_ADMIN_PASSWORD),
+            "env_password_length": len(DEFAULT_ADMIN_PASSWORD),
+            "env_password_matches_hash": (
+                bool(admin_user.get("password_hash"))
+                and bool(DEFAULT_ADMIN_PASSWORD)
+                and check_password_hash(admin_user["password_hash"], DEFAULT_ADMIN_PASSWORD)
+            ),
             "reset_admin_password_on_boot": RESET_ADMIN_PASSWORD_ON_BOOT,
         }
     else:
@@ -285,6 +320,46 @@ def debug_admin():
         }
 
     return jsonify(response)
+
+
+@app.route("/debug-admin/reset-password", methods=["POST", "GET"])
+def debug_admin_reset_password():
+    provided_token = request.values.get("token", "").strip()
+    if not DEBUG_ADMIN_TOKEN or provided_token != DEBUG_ADMIN_TOKEN:
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+
+    if not DEFAULT_ADMIN_LOGIN_ID or not DEFAULT_ADMIN_PASSWORD:
+        return jsonify({"ok": False, "error": "missing_admin_env"}), 400
+
+    admin_user = find_user_by_identity(DEFAULT_ADMIN_LOGIN_ID)
+    if not admin_user:
+        return jsonify({"ok": False, "error": "admin_not_found"}), 404
+
+    users_col.update_one(
+        {"_id": admin_user["_id"]},
+        {
+            "$set": {
+                "username": DEFAULT_ADMIN_USERNAME,
+                "login_id": DEFAULT_ADMIN_LOGIN_ID,
+                "is_admin": True,
+                "is_approved": True,
+                "is_disabled": False,
+                "password_hash": generate_password_hash(DEFAULT_ADMIN_PASSWORD),
+                "password_changed_by_user": False,
+            }
+        },
+    )
+    app.logger.warning(
+        "Admin password force-reset through debug endpoint for login_id=%s",
+        DEFAULT_ADMIN_LOGIN_ID,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "message": "admin password reset from environment",
+            "login_id": DEFAULT_ADMIN_LOGIN_ID,
+        }
+    )
 
 
 def recent_notifications_for(user_id, limit=8):
@@ -468,9 +543,7 @@ def login():
     if request.method == "POST":
         login_input = request.form.get("login_id", "").strip()
         password = request.form.get("password", "")
-        user = ensure_user_defaults(users_col.find_one({"login_id": login_input}))
-        if not user:
-            user = ensure_user_defaults(users_col.find_one({"username": login_input}))
+        user = find_user_by_identity(login_input)
 
         if not user:
             app.logger.warning("Login failed for input=%s reason=user_not_found", login_input)

@@ -28,3 +28,9 @@ For production troubleshooting, you can also set:
 - `DEBUG_ADMIN_TOKEN`
 
 Then open `/debug-admin?token=YOUR_TOKEN` on the deployed app to inspect whether the admin account exists and whether it has a password hash. The endpoint does not reveal the password or hash value.
+
+If the admin record exists but login still fails, you can force-reset the admin password from the current environment values by opening:
+
+- `/debug-admin/reset-password?token=YOUR_TOKEN`
+
+After that, try logging in again with `DEFAULT_ADMIN_LOGIN_ID` and `DEFAULT_ADMIN_PASSWORD`.
