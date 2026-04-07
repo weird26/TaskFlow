@@ -18,3 +18,5 @@ services:
         sync: false
       - key: DEFAULT_ADMIN_USERNAME
         sync: false
+      - key: RESET_ADMIN_PASSWORD_ON_BOOT
+        value: "0"

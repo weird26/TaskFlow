@@ -5,7 +5,6 @@ import re
 
 import certifi
 from dotenv import load_dotenv
-import os
 
 
 
@@ -22,7 +21,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
 MONGO_URI = os.getenv("MONGO_URI")
-print("DEBUG MONGO_URI =", MONGO_URI)
 
 if not MONGO_URI:
     raise RuntimeError("MONGO_URI is missing. Add your MongoDB Atlas connection string to .env.")
@@ -54,6 +52,7 @@ LOGIN_REWARD_POINTS = 100
 DEFAULT_ADMIN_LOGIN_ID = os.environ.get("DEFAULT_ADMIN_LOGIN_ID", "").strip()
 DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", "").strip()
 DEFAULT_ADMIN_USERNAME = os.environ.get("DEFAULT_ADMIN_USERNAME", "Akay Admin").strip()
+RESET_ADMIN_PASSWORD_ON_BOOT = os.environ.get("RESET_ADMIN_PASSWORD_ON_BOOT", "0").strip() == "1"
 TASK_LEVELS = {
     "low": {"label": "Low", "points": 25},
     "medium": {"label": "Medium", "points": 50},
@@ -175,14 +174,18 @@ def bootstrap_existing_users():
             "is_admin": True,
             "is_approved": True,
             "is_disabled": False,
-            "password_hash": generate_password_hash(DEFAULT_ADMIN_PASSWORD),
-            "password_changed_by_user": False,
         }
+        if RESET_ADMIN_PASSWORD_ON_BOOT or not admin_user.get("password_hash"):
+            update_fields["password_hash"] = generate_password_hash(DEFAULT_ADMIN_PASSWORD)
+            update_fields["password_changed_by_user"] = False
         users_col.update_one(
             {"_id": admin_user["_id"]},
             {"$set": update_fields},
         )
-        print(f"Admin login reset for: {DEFAULT_ADMIN_LOGIN_ID}")
+        print(
+            "Admin account synced for:"
+            f" {DEFAULT_ADMIN_LOGIN_ID} (password_reset={'yes' if 'password_hash' in update_fields else 'no'})"
+        )
     else:
         users_col.insert_one(
             {
