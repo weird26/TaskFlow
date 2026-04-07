@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Offline Hours — TaskFlow{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo">◈</div>
+      <h1>TaskFlow is Offline</h1>
+    </div>
+
+    <p class="auth-footer">
+      This app is available daily from <strong>{{ start_hour }}:00</strong> to
+      <strong>{{ end_hour }}:00</strong> in <strong>{{ business_timezone }}</strong>.
+    </p>
+    <p class="auth-footer">
+      We keep it closed outside those hours to stretch free-tier usage and keep the database small.
+    </p>
+  </div>
+</div>
+{% endblock %}

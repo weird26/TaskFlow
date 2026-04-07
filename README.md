@@ -34,3 +34,17 @@ If the admin record exists but login still fails, you can force-reset the admin 
 - `/debug-admin/reset-password?token=YOUR_TOKEN`
 
 After that, try logging in again with `DEFAULT_ADMIN_LOGIN_ID` and `DEFAULT_ADMIN_PASSWORD`.
+
+## Free-tier guardrails
+
+The app supports a simple business-hours access window and automatic cleanup for small teams on free hosting:
+
+- `BUSINESS_TIMEZONE`
+- `ACCESS_START_HOUR`
+- `ACCESS_END_HOUR`
+- `ENFORCE_ACCESS_WINDOW`
+- `READ_NOTIFICATION_RETENTION_DAYS`
+- `COMPLETED_TASK_RETENTION_DAYS`
+- `CLEANUP_INTERVAL_HOURS`
+
+When the access window is enabled, the UI shows an offline-hours screen outside working hours. Cleanup removes old read notifications and old completed tasks on a schedule, and admins can trigger cleanup manually from the admin dashboard.

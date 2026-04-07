@@ -22,3 +22,17 @@ services:
         value: "0"
       - key: DEBUG_ADMIN_TOKEN
         sync: false
+      - key: BUSINESS_TIMEZONE
+        value: "Asia/Calcutta"
+      - key: ACCESS_START_HOUR
+        value: "9"
+      - key: ACCESS_END_HOUR
+        value: "19"
+      - key: ENFORCE_ACCESS_WINDOW
+        value: "1"
+      - key: READ_NOTIFICATION_RETENTION_DAYS
+        value: "21"
+      - key: COMPLETED_TASK_RETENTION_DAYS
+        value: "90"
+      - key: CLEANUP_INTERVAL_HOURS
+        value: "12"

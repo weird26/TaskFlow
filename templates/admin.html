@@ -11,6 +11,25 @@
     </div>
   </div>
 
+  <section class="profile-section admin-ops-panel">
+    <h2 class="section-title">Free Tier Guardrails</h2>
+    <p class="page-sub">
+      Read notifications older than {{ notification_retention_days }} days and completed tasks older than
+      {{ completed_task_retention_days }} days are cleaned automatically.
+    </p>
+    <p class="form-hint">
+      {% if cleanup_state.last_cleanup_at %}
+        Last cleanup: {{ cleanup_state.last_cleanup_at.strftime('%b %d, %Y %I:%M %p') }} UTC.
+        Removed {{ cleanup_state.notifications_deleted }} notifications and {{ cleanup_state.tasks_deleted }} tasks.
+      {% else %}
+        Cleanup has not run yet.
+      {% endif %}
+    </p>
+    <form method="POST" action="{{ url_for('run_cleanup_now') }}" class="form-actions">
+      <button type="submit" class="btn btn-outline">Run Cleanup Now</button>
+    </form>
+  </section>
+
   <div class="admin-grid">
     <section class="profile-section">
       <h2 class="section-title">Create User</h2>

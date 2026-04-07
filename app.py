@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 import os
 import re
+from zoneinfo import ZoneInfo
 
 import certifi
 from dotenv import load_dotenv
@@ -48,6 +49,7 @@ db = client["taskflow"]
 users_col = db["users"]
 tasks_col = db["tasks"]
 notifications_col = db["notifications"]
+app_meta_col = db["app_meta"]
 
 LOGIN_REWARD_POINTS = 100
 DEFAULT_ADMIN_LOGIN_ID = os.environ.get("DEFAULT_ADMIN_LOGIN_ID", "").strip()
@@ -55,6 +57,13 @@ DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", "").strip()
 DEFAULT_ADMIN_USERNAME = os.environ.get("DEFAULT_ADMIN_USERNAME", "Akay Admin").strip()
 RESET_ADMIN_PASSWORD_ON_BOOT = os.environ.get("RESET_ADMIN_PASSWORD_ON_BOOT", "0").strip() == "1"
 DEBUG_ADMIN_TOKEN = os.environ.get("DEBUG_ADMIN_TOKEN", "").strip()
+BUSINESS_TIMEZONE = os.environ.get("BUSINESS_TIMEZONE", "Asia/Calcutta").strip() or "Asia/Calcutta"
+ACCESS_START_HOUR = int(os.environ.get("ACCESS_START_HOUR", "9"))
+ACCESS_END_HOUR = int(os.environ.get("ACCESS_END_HOUR", "19"))
+ENFORCE_ACCESS_WINDOW = os.environ.get("ENFORCE_ACCESS_WINDOW", "1").strip() == "1"
+READ_NOTIFICATION_RETENTION_DAYS = int(os.environ.get("READ_NOTIFICATION_RETENTION_DAYS", "21"))
+COMPLETED_TASK_RETENTION_DAYS = int(os.environ.get("COMPLETED_TASK_RETENTION_DAYS", "90"))
+CLEANUP_INTERVAL_HOURS = int(os.environ.get("CLEANUP_INTERVAL_HOURS", "12"))
 TASK_LEVELS = {
     "low": {"label": "Low", "points": 25},
     "medium": {"label": "Medium", "points": 50},
@@ -80,6 +89,7 @@ tasks_col.create_index("giver_id")
 tasks_col.create_index("taker_id")
 tasks_col.create_index("status")
 notifications_col.create_index([("user_id", 1), ("read", 1), ("created_at", -1)])
+app_meta_col.create_index("updated_at")
 print("MongoDB connected!")
 
 
@@ -88,6 +98,10 @@ def safe_object_id(raw_value):
         return ObjectId(raw_value)
     except (InvalidId, TypeError):
         return None
+
+
+def now_local():
+    return datetime.now(ZoneInfo(BUSINESS_TIMEZONE))
 
 
 def default_user_fields(user):
@@ -157,6 +171,76 @@ def find_user_by_identity(identity):
     return ensure_user_defaults(
         users_col.find_one({"username": cleaned}, collation=identity_collation)
     )
+
+
+def access_window_active(current_time=None):
+    current_time = current_time or now_local()
+    return ACCESS_START_HOUR <= current_time.hour < ACCESS_END_HOUR
+
+
+def get_cleanup_state():
+    state = app_meta_col.find_one({"_id": "cleanup_state"}) or {}
+    return {
+        "last_cleanup_at": state.get("last_cleanup_at"),
+        "last_reason": state.get("last_reason"),
+        "notifications_deleted": int(state.get("notifications_deleted", 0) or 0),
+        "tasks_deleted": int(state.get("tasks_deleted", 0) or 0),
+        "updated_at": state.get("updated_at"),
+    }
+
+
+def run_data_cleanup(reason, force=False):
+    state = get_cleanup_state()
+    last_cleanup_at = state.get("last_cleanup_at")
+    now_utc = datetime.utcnow()
+    if (
+        not force
+        and last_cleanup_at
+        and now_utc - last_cleanup_at < timedelta(hours=CLEANUP_INTERVAL_HOURS)
+    ):
+        return {
+            "ran": False,
+            "last_cleanup_at": last_cleanup_at,
+            "notifications_deleted": 0,
+            "tasks_deleted": 0,
+        }
+
+    notifications_cutoff = now_utc - timedelta(days=READ_NOTIFICATION_RETENTION_DAYS)
+    tasks_cutoff = now_utc - timedelta(days=COMPLETED_TASK_RETENTION_DAYS)
+
+    notifications_result = notifications_col.delete_many(
+        {"read": True, "created_at": {"$lt": notifications_cutoff}}
+    )
+    tasks_result = tasks_col.delete_many(
+        {"status": "completed", "updated_at": {"$lt": tasks_cutoff}}
+    )
+
+    summary = {
+        "ran": True,
+        "last_cleanup_at": now_utc,
+        "notifications_deleted": notifications_result.deleted_count,
+        "tasks_deleted": tasks_result.deleted_count,
+    }
+    app_meta_col.update_one(
+        {"_id": "cleanup_state"},
+        {
+            "$set": {
+                "last_cleanup_at": now_utc,
+                "last_reason": reason,
+                "notifications_deleted": notifications_result.deleted_count,
+                "tasks_deleted": tasks_result.deleted_count,
+                "updated_at": now_utc,
+            }
+        },
+        upsert=True,
+    )
+    app.logger.info(
+        "Data cleanup ran reason=%s notifications_deleted=%s tasks_deleted=%s",
+        reason,
+        notifications_result.deleted_count,
+        tasks_result.deleted_count,
+    )
+    return summary
 
 
 def bootstrap_existing_users():
@@ -274,6 +358,34 @@ def active_users(exclude_user_id=None):
         ).sort("username", 1)
     )
     return [merged_user_defaults(user) for user in users]
+
+
+@app.before_request
+def enforce_access_window_and_cleanup():
+    if request.endpoint in {
+        "static",
+        "debug_admin",
+        "debug_admin_reset_password",
+    }:
+        return None
+
+    run_data_cleanup("scheduled_request")
+
+    if not ENFORCE_ACCESS_WINDOW:
+        return None
+
+    if access_window_active():
+        return None
+
+    return (
+        render_template(
+            "closed.html",
+            start_hour=ACCESS_START_HOUR,
+            end_hour=ACCESS_END_HOUR,
+            business_timezone=BUSINESS_TIMEZONE,
+        ),
+        200,
+    )
 
 
 @app.route("/debug-admin", methods=["GET"])
@@ -496,6 +608,7 @@ def admin_required(f):
 @app.context_processor
 def inject_nav_context():
     user = current_user()
+    cleanup_state = get_cleanup_state()
     if not user:
         return {
             "nav_user": None,
@@ -504,6 +617,11 @@ def inject_nav_context():
             "notification_types": NOTIFICATION_TYPES,
             "task_levels": TASK_LEVELS,
             "pending_approval_count": 0,
+            "cleanup_state": cleanup_state,
+            "business_timezone": BUSINESS_TIMEZONE,
+            "access_start_hour": ACCESS_START_HOUR,
+            "access_end_hour": ACCESS_END_HOUR,
+            "enforce_access_window": ENFORCE_ACCESS_WINDOW,
         }
 
     uid = str(user["_id"])
@@ -514,6 +632,11 @@ def inject_nav_context():
         "notification_types": NOTIFICATION_TYPES,
         "task_levels": TASK_LEVELS,
         "pending_approval_count": 0,
+        "cleanup_state": cleanup_state,
+        "business_timezone": BUSINESS_TIMEZONE,
+        "access_start_hour": ACCESS_START_HOUR,
+        "access_end_hour": ACCESS_END_HOUR,
+        "enforce_access_window": ENFORCE_ACCESS_WINDOW,
     }
 
 
@@ -623,6 +746,7 @@ def logout():
 @admin_required
 def admin_dashboard():
     admin_user = current_user()
+    cleanup_state = get_cleanup_state()
     managed_users = list(
         users_col.find(
             {"is_admin": {"$ne": True}},
@@ -642,6 +766,9 @@ def admin_dashboard():
         "admin.html",
         user=admin_user,
         managed_users=managed_users,
+        cleanup_state=cleanup_state,
+        notification_retention_days=READ_NOTIFICATION_RETENTION_DAYS,
+        completed_task_retention_days=COMPLETED_TASK_RETENTION_DAYS,
     )
 
 
@@ -695,6 +822,19 @@ def create_user():
         kind="admin",
     )
     flash(f"Created user {username}.", "success")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/run-cleanup", methods=["POST"])
+@admin_required
+def run_cleanup_now():
+    summary = run_data_cleanup("manual_admin", force=True)
+    flash(
+        "Cleanup complete. Removed "
+        f"{summary['notifications_deleted']} old read notifications and "
+        f"{summary['tasks_deleted']} old completed tasks.",
+        "success",
+    )
     return redirect(url_for("admin_dashboard"))
 
 
