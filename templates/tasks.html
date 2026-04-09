@@ -234,10 +234,10 @@
                   {% endif %}
                   <div>
                     <strong>{{ message.author_name }}</strong>
-                    <span>{{ message.created_at.strftime('%b %d, %I:%M %p') }}</span>
+                    <span>{{ message.created_at_label }}</span>
                   </div>
                 </div>
-                <span class="feed-expiry">Deletes {{ message.expires_at.strftime('%b %d') }}</span>
+                <span class="feed-expiry">Deletes {{ message.expires_at_label }}</span>
               </div>
               <p class="feed-message">{{ message.message }}</p>
             </article>
@@ -343,9 +343,9 @@
             <div class="feed-card-head">
               <div>
                 <strong>{{ link.title }}</strong>
-                <span>Shared by {{ link.author_name }} · {{ link.created_at.strftime('%b %d, %I:%M %p') }}</span>
+                <span>Shared by {{ link.author_name }} · {{ link.created_at_label }}</span>
               </div>
-              <span class="feed-expiry">Deletes {{ link.expires_at.strftime('%b %d') }}</span>
+              <span class="feed-expiry">Deletes {{ link.expires_at_label }}</span>
             </div>
             <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="link-card-url">{{ link.url }}</a>
             {% if link.note %}

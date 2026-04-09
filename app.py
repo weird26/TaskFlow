@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 import os
 import re
@@ -117,7 +117,38 @@ def now_local():
 
 
 def utc_now():
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
+
+
+def normalize_utc(dt_value):
+    if not dt_value:
+        return None
+    if dt_value.tzinfo is None:
+        return dt_value.replace(tzinfo=timezone.utc)
+    return dt_value.astimezone(timezone.utc)
+
+
+def to_business_time(dt_value):
+    normalized = normalize_utc(dt_value)
+    if not normalized:
+        return None
+    return normalized.astimezone(ZoneInfo(BUSINESS_TIMEZONE))
+
+
+def format_business_datetime(dt_value, include_date=True):
+    localized = to_business_time(dt_value)
+    if not localized:
+        return ""
+    if include_date:
+        return localized.strftime("%b %d, %I:%M %p")
+    return localized.strftime("%I:%M %p")
+
+
+def format_business_date(dt_value):
+    localized = to_business_time(dt_value)
+    if not localized:
+        return ""
+    return localized.strftime("%b %d")
 
 
 def default_user_fields(user):
@@ -316,25 +347,22 @@ def annotate_group_messages(messages):
         author = users_by_id.get(message.get("author_id"))
         message["author_name"] = author["username"] if author else "Unknown"
         message["author_avatar"] = author.get("profile_picture_url", "") if author else ""
+        message["created_at_label"] = format_business_datetime(message.get("created_at"))
+        message["expires_at_label"] = format_business_date(message.get("expires_at"))
     return messages
 
 
 def serialize_group_message(message):
+    created_at = normalize_utc(message.get("created_at"))
     return {
         "id": str(message["_id"]),
         "author_id": message.get("author_id"),
         "author_name": message.get("author_name", "Unknown"),
         "author_avatar": message.get("author_avatar", ""),
         "message": message.get("message", ""),
-        "created_at": message["created_at"].isoformat() if message.get("created_at") else None,
-        "created_at_label": (
-            message["created_at"].strftime("%b %d, %I:%M %p")
-            if message.get("created_at")
-            else ""
-        ),
-        "expires_at_label": (
-            message["expires_at"].strftime("%b %d") if message.get("expires_at") else ""
-        ),
+        "created_at": created_at.isoformat().replace("+00:00", "Z") if created_at else None,
+        "created_at_label": format_business_datetime(message.get("created_at")),
+        "expires_at_label": format_business_date(message.get("expires_at")),
     }
 
 
@@ -354,6 +382,8 @@ def annotate_shared_links(links):
     for link in links:
         author = users_by_id.get(link.get("author_id"))
         link["author_name"] = author["username"] if author else "Unknown"
+        link["created_at_label"] = format_business_datetime(link.get("created_at"))
+        link["expires_at_label"] = format_business_date(link.get("expires_at"))
     return links
 
 
@@ -1370,6 +1400,8 @@ def post_group_message_api():
     document["_id"] = result.inserted_id
     document["author_name"] = user["username"]
     document["author_avatar"] = user.get("profile_picture_url", "")
+    document["created_at_label"] = format_business_datetime(document["created_at"])
+    document["expires_at_label"] = format_business_date(document["expires_at"])
     return jsonify({"ok": True, "message": serialize_group_message(document)})
 
 
