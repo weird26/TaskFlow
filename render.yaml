@@ -36,3 +36,9 @@ services:
         value: "90"
       - key: CLEANUP_INTERVAL_HOURS
         value: "12"
+      - key: EPHEMERAL_CONTENT_RETENTION_DAYS
+        value: "7"
+      - key: GROUP_CHAT_FETCH_LIMIT
+        value: "60"
+      - key: SHARED_LINK_FETCH_LIMIT
+        value: "40"

@@ -31,6 +31,13 @@
       My Posts
       <span class="tab-count">{{ posted|length }}</span>
     </button>
+    <button class="tab" data-tab="live-chat">
+      Live Chat
+    </button>
+    <button class="tab" data-tab="links">
+      Links
+      <span class="tab-count">{{ shared_links|length }}</span>
+    </button>
   </div>
 
   <div class="tab-panel active" id="tab-available">
@@ -188,18 +195,408 @@
       </div>
     {% endif %}
   </div>
+  <div class="tab-panel" id="tab-live-chat">
+    <section class="team-panel team-panel-chat">
+      <div class="team-panel-head">
+        <div>
+          <div class="section-kicker">Realtime Team Room</div>
+          <h3>Live Chat</h3>
+          <p>WhatsApp-style team updates with live refresh, sent time, and automatic cleanup for free-tier hosting.</p>
+        </div>
+        <span class="expiry-badge">{{ ephemeral_retention_days }}-day expiry</span>
+      </div>
+
+      <div class="chat-shell">
+        <div class="chat-toolbar">
+          <div class="chat-toolbar-copy">
+            <strong>Team Room</strong>
+            <span>Live polling keeps messages updated without needing a page refresh</span>
+          </div>
+          <span class="chat-status-dot" id="groupChatLiveBadge">Live</span>
+        </div>
+
+        {% if group_messages %}
+          <div
+            class="chat-stream"
+            id="groupChatStream"
+            data-current-user-id="{{ user._id }}"
+            data-api-url="{{ url_for('group_chat_messages_api') }}"
+            data-post-url="{{ url_for('post_group_message_api') }}"
+          >
+            {% for message in group_messages %}
+            <article class="chat-bubble">
+              <div class="chat-bubble-meta">
+                <div class="feed-author">
+                  {% if message.author_avatar %}
+                    <img src="{{ message.author_avatar }}" alt="{{ message.author_name }}" class="feed-avatar-image" />
+                  {% else %}
+                    <div class="feed-avatar">{{ message.author_name[0]|upper }}</div>
+                  {% endif %}
+                  <div>
+                    <strong>{{ message.author_name }}</strong>
+                    <span>{{ message.created_at.strftime('%b %d, %I:%M %p') }}</span>
+                  </div>
+                </div>
+                <span class="feed-expiry">Deletes {{ message.expires_at.strftime('%b %d') }}</span>
+              </div>
+              <p class="feed-message">{{ message.message }}</p>
+            </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div
+            class="empty-state empty-state-sm chat-empty"
+            id="groupChatEmpty"
+            data-current-user-id="{{ user._id }}"
+            data-api-url="{{ url_for('group_chat_messages_api') }}"
+            data-post-url="{{ url_for('post_group_message_api') }}"
+          >
+            <div class="empty-icon">✦</div>
+            <p>No group chat messages yet. Start with a quick team update.</p>
+          </div>
+        {% endif %}
+
+        <form
+          method="POST"
+          action="{{ url_for('post_group_message') }}"
+          class="team-form chat-compose"
+          id="groupChatForm"
+        >
+          <div class="form-group">
+            <label for="message">Write Message</label>
+            <textarea
+              id="message"
+              name="message"
+              rows="4"
+              maxlength="500"
+              placeholder="Share a blocker, update, decision, or quick note for everyone."
+              required
+            ></textarea>
+          </div>
+          <div class="chat-compose-actions">
+            <span class="compose-note" id="groupChatStatus">Messages are auto-deleted after {{ ephemeral_retention_days }} days.</span>
+            <button class="btn btn-primary" type="submit" id="groupChatSubmit">Send Message</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-panel" id="tab-links">
+    <section class="team-panel team-panel-links">
+      <div class="team-panel-head">
+        <div>
+          <div class="section-kicker">Quick References</div>
+          <h3>Shared Links</h3>
+          <p>One clean place to add useful docs, dashboards, tickets, and working references.</p>
+        </div>
+        <span class="expiry-badge">{{ ephemeral_retention_days }}-day expiry</span>
+      </div>
+
+      <div class="links-setup">
+        <form method="POST" action="{{ url_for('create_shared_link') }}" class="team-form links-form">
+          <div class="links-form-grid">
+            <div class="form-group">
+              <label for="title">Link Title</label>
+              <input
+                id="title"
+                name="title"
+                type="text"
+                maxlength="100"
+                placeholder="Sprint dashboard"
+                required
+              />
+            </div>
+            <div class="form-group form-group-wide">
+              <label for="url">URL</label>
+              <input
+                id="url"
+                name="url"
+                type="url"
+                maxlength="500"
+                placeholder="https://example.com"
+                required
+              />
+            </div>
+            <div class="form-group form-group-wide">
+              <label for="note">Note</label>
+              <textarea
+                id="note"
+                name="note"
+                rows="3"
+                maxlength="240"
+                placeholder="Add short context so teammates know why this link matters."
+              ></textarea>
+            </div>
+          </div>
+          <div class="chat-compose-actions">
+            <span class="compose-note">Links are removed from the database automatically after {{ ephemeral_retention_days }} days.</span>
+            <button class="btn btn-primary" type="submit">Save Link</button>
+          </div>
+        </form>
+      </div>
+
+      {% if shared_links %}
+        <div class="feed-list links-list">
+          {% for link in shared_links %}
+          <article class="feed-card link-card">
+            <div class="feed-card-head">
+              <div>
+                <strong>{{ link.title }}</strong>
+                <span>Shared by {{ link.author_name }} · {{ link.created_at.strftime('%b %d, %I:%M %p') }}</span>
+              </div>
+              <span class="feed-expiry">Deletes {{ link.expires_at.strftime('%b %d') }}</span>
+            </div>
+            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="link-card-url">{{ link.url }}</a>
+            {% if link.note %}
+              <p class="feed-message">{{ link.note }}</p>
+            {% endif %}
+          </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <div class="empty-icon">⌘</div>
+          <p>No shared links yet. Add docs, dashboards, or references the team needs this week.</p>
+        </div>
+      {% endif %}
+    </section>
+  </div>
 </div>
 
 <script>
+  let refreshTimer = null;
+
   function switchTab(name) {
     document.querySelectorAll('.tab').forEach((tab) => tab.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
     document.querySelector(`[data-tab="${name}"]`).classList.add('active');
     document.getElementById(`tab-${name}`).classList.add('active');
+    if (name === 'live-chat') {
+      startLivePolling();
+      refreshChat().catch(() => {});
+    } else {
+      stopLivePolling();
+    }
   }
 
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
+
+  const chatForm = document.getElementById('groupChatForm');
+  const chatStatus = document.getElementById('groupChatStatus');
+  const chatSubmit = document.getElementById('groupChatSubmit');
+  const chatStream = document.getElementById('groupChatStream');
+  const chatEmpty = document.getElementById('groupChatEmpty');
+  const chatAnchor = chatStream || chatEmpty;
+  const liveBadge = document.getElementById('groupChatLiveBadge');
+  const chatTimezone = {{ business_timezone|tojson }};
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function formatChatTime(isoValue) {
+    if (!isoValue) {
+      return '';
+    }
+
+    try {
+      return new Intl.DateTimeFormat('en-IN', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: chatTimezone
+      }).format(new Date(isoValue));
+    } catch (_) {
+      return isoValue;
+    }
+  }
+
+  function messageMarkup(message, currentUserId) {
+    const avatar = message.author_avatar
+      ? `<img src="${escapeHtml(message.author_avatar)}" alt="${escapeHtml(message.author_name)}" class="feed-avatar-image" />`
+      : `<div class="feed-avatar">${escapeHtml((message.author_name || '?').slice(0, 1).toUpperCase())}</div>`;
+    const ownClass = message.author_id === currentUserId ? ' chat-bubble-own' : '';
+    const roleLabel = message.author_id === currentUserId ? 'Sent' : 'Received';
+
+    return `
+      <article class="chat-bubble${ownClass}">
+        <div class="chat-bubble-meta">
+          <div class="feed-author">
+            ${avatar}
+            <div>
+              <strong>${escapeHtml(message.author_name)}</strong>
+              <span>${escapeHtml(roleLabel)}</span>
+            </div>
+          </div>
+          <span class="feed-expiry">Deletes ${escapeHtml(message.expires_at_label)}</span>
+        </div>
+        <p class="feed-message">${escapeHtml(message.message)}</p>
+        <div class="chat-bubble-time">${escapeHtml(formatChatTime(message.created_at))}</div>
+      </article>
+    `;
+  }
+
+  function ensureChatStream(anchor) {
+    let stream = document.getElementById('groupChatStream');
+    if (stream) {
+      return stream;
+    }
+
+    const dataCurrentUserId = anchor.dataset.currentUserId;
+    const dataApiUrl = anchor.dataset.apiUrl;
+    const dataPostUrl = anchor.dataset.postUrl;
+
+    stream = document.createElement('div');
+    stream.id = 'groupChatStream';
+    stream.className = 'chat-stream';
+    stream.dataset.currentUserId = dataCurrentUserId;
+    stream.dataset.apiUrl = dataApiUrl;
+    stream.dataset.postUrl = dataPostUrl;
+    anchor.replaceWith(stream);
+    return stream;
+  }
+
+  function renderChat(messages) {
+    if (!chatAnchor) {
+      return;
+    }
+
+    if (!messages.length) {
+      const stream = document.getElementById('groupChatStream');
+      if (stream) {
+        stream.innerHTML = '';
+      }
+      return;
+    }
+
+    const stream = ensureChatStream(chatAnchor);
+    const shouldStickToBottom =
+      stream.scrollHeight - stream.scrollTop - stream.clientHeight < 80 || stream.dataset.initialized !== 'true';
+
+    stream.innerHTML = messages.map((message) => messageMarkup(message, stream.dataset.currentUserId)).join('');
+    stream.dataset.initialized = 'true';
+
+    if (shouldStickToBottom) {
+      stream.scrollTop = stream.scrollHeight;
+    }
+  }
+
+  async function refreshChat() {
+    if (!chatAnchor) {
+      return;
+    }
+
+    const apiUrl = chatAnchor.dataset.apiUrl;
+    const response = await fetch(apiUrl, {
+      headers: { 'X-Requested-With': 'fetch' },
+      credentials: 'same-origin'
+    });
+
+    if (!response.ok) {
+      if (liveBadge) {
+        liveBadge.textContent = 'Retrying';
+      }
+      throw new Error('Unable to refresh chat');
+    }
+
+    const payload = await response.json();
+    if (liveBadge) {
+      liveBadge.textContent = 'Live';
+    }
+    renderChat(payload.messages || []);
+  }
+
+  function startLivePolling() {
+    if (refreshTimer || !chatAnchor) {
+      return;
+    }
+    refreshTimer = setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
+      refreshChat().catch(() => {});
+    }, 3000);
+  }
+
+  function stopLivePolling() {
+    if (!refreshTimer) {
+      return;
+    }
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+
+  if (chatForm && chatAnchor) {
+    chatForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const textarea = chatForm.querySelector('textarea[name="message"]');
+      const message = textarea.value.trim();
+      if (!message) {
+        chatStatus.textContent = 'Write a message before sending.';
+        return;
+      }
+
+      chatSubmit.disabled = true;
+      chatStatus.textContent = 'Sending...';
+      if (liveBadge) {
+        liveBadge.textContent = 'Sending';
+      }
+
+      try {
+        const response = await fetch(chatAnchor.dataset.postUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'fetch'
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({ message })
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || 'Unable to send message.');
+        }
+
+        textarea.value = '';
+        chatStatus.textContent = 'Sent. Messages update live for everyone online.';
+        await refreshChat();
+      } catch (error) {
+        chatStatus.textContent = error.message || 'Unable to send message.';
+        if (liveBadge) {
+          liveBadge.textContent = 'Retrying';
+        }
+      } finally {
+        chatSubmit.disabled = false;
+      }
+    });
+
+    refreshChat().catch(() => {
+      chatStatus.textContent = 'Live chat sync is unavailable right now.';
+      if (liveBadge) {
+        liveBadge.textContent = 'Offline';
+      }
+    });
+    if (document.querySelector('.tab.active')?.dataset.tab === 'live-chat') {
+      startLivePolling();
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopLivePolling();
+      } else {
+        if (document.querySelector('.tab.active')?.dataset.tab === 'live-chat') {
+          refreshChat().catch(() => {});
+          startLivePolling();
+        }
+      }
+    });
+  }
 </script>
 {% endblock %}

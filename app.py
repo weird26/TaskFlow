@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 import os
 import re
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import certifi
@@ -50,6 +51,8 @@ users_col = db["users"]
 tasks_col = db["tasks"]
 notifications_col = db["notifications"]
 app_meta_col = db["app_meta"]
+group_chat_col = db["group_chat_messages"]
+shared_links_col = db["shared_links"]
 
 LOGIN_REWARD_POINTS = 100
 DEFAULT_ADMIN_LOGIN_ID = os.environ.get("DEFAULT_ADMIN_LOGIN_ID", "").strip()
@@ -64,6 +67,9 @@ ENFORCE_ACCESS_WINDOW = os.environ.get("ENFORCE_ACCESS_WINDOW", "1").strip() == 
 READ_NOTIFICATION_RETENTION_DAYS = int(os.environ.get("READ_NOTIFICATION_RETENTION_DAYS", "21"))
 COMPLETED_TASK_RETENTION_DAYS = int(os.environ.get("COMPLETED_TASK_RETENTION_DAYS", "90"))
 CLEANUP_INTERVAL_HOURS = int(os.environ.get("CLEANUP_INTERVAL_HOURS", "12"))
+EPHEMERAL_CONTENT_RETENTION_DAYS = int(os.environ.get("EPHEMERAL_CONTENT_RETENTION_DAYS", "7"))
+GROUP_CHAT_FETCH_LIMIT = int(os.environ.get("GROUP_CHAT_FETCH_LIMIT", "60"))
+SHARED_LINK_FETCH_LIMIT = int(os.environ.get("SHARED_LINK_FETCH_LIMIT", "40"))
 TASK_LEVELS = {
     "low": {"label": "Low", "points": 25},
     "medium": {"label": "Medium", "points": 50},
@@ -90,6 +96,12 @@ tasks_col.create_index("taker_id")
 tasks_col.create_index("status")
 notifications_col.create_index([("user_id", 1), ("read", 1), ("created_at", -1)])
 app_meta_col.create_index("updated_at")
+group_chat_col.create_index("created_at")
+group_chat_col.create_index("author_id")
+group_chat_col.create_index("expires_at", expireAfterSeconds=0)
+shared_links_col.create_index("created_at")
+shared_links_col.create_index("author_id")
+shared_links_col.create_index("expires_at", expireAfterSeconds=0)
 print("MongoDB connected!")
 
 
@@ -102,6 +114,10 @@ def safe_object_id(raw_value):
 
 def now_local():
     return datetime.now(ZoneInfo(BUSINESS_TIMEZONE))
+
+
+def utc_now():
+    return datetime.utcnow()
 
 
 def default_user_fields(user):
@@ -185,6 +201,8 @@ def get_cleanup_state():
         "last_reason": state.get("last_reason"),
         "notifications_deleted": int(state.get("notifications_deleted", 0) or 0),
         "tasks_deleted": int(state.get("tasks_deleted", 0) or 0),
+        "group_chat_deleted": int(state.get("group_chat_deleted", 0) or 0),
+        "shared_links_deleted": int(state.get("shared_links_deleted", 0) or 0),
         "updated_at": state.get("updated_at"),
     }
 
@@ -207,6 +225,7 @@ def run_data_cleanup(reason, force=False):
 
     notifications_cutoff = now_utc - timedelta(days=READ_NOTIFICATION_RETENTION_DAYS)
     tasks_cutoff = now_utc - timedelta(days=COMPLETED_TASK_RETENTION_DAYS)
+    ephemeral_cutoff = now_utc
 
     notifications_result = notifications_col.delete_many(
         {"read": True, "created_at": {"$lt": notifications_cutoff}}
@@ -214,12 +233,16 @@ def run_data_cleanup(reason, force=False):
     tasks_result = tasks_col.delete_many(
         {"status": "completed", "updated_at": {"$lt": tasks_cutoff}}
     )
+    group_chat_result = group_chat_col.delete_many({"expires_at": {"$lt": ephemeral_cutoff}})
+    shared_links_result = shared_links_col.delete_many({"expires_at": {"$lt": ephemeral_cutoff}})
 
     summary = {
         "ran": True,
         "last_cleanup_at": now_utc,
         "notifications_deleted": notifications_result.deleted_count,
         "tasks_deleted": tasks_result.deleted_count,
+        "group_chat_deleted": group_chat_result.deleted_count,
+        "shared_links_deleted": shared_links_result.deleted_count,
     }
     app_meta_col.update_one(
         {"_id": "cleanup_state"},
@@ -227,20 +250,111 @@ def run_data_cleanup(reason, force=False):
             "$set": {
                 "last_cleanup_at": now_utc,
                 "last_reason": reason,
-                "notifications_deleted": notifications_result.deleted_count,
-                "tasks_deleted": tasks_result.deleted_count,
-                "updated_at": now_utc,
-            }
+            "notifications_deleted": notifications_result.deleted_count,
+            "tasks_deleted": tasks_result.deleted_count,
+            "group_chat_deleted": group_chat_result.deleted_count,
+            "shared_links_deleted": shared_links_result.deleted_count,
+            "updated_at": now_utc,
+        }
         },
         upsert=True,
     )
     app.logger.info(
-        "Data cleanup ran reason=%s notifications_deleted=%s tasks_deleted=%s",
+        "Data cleanup ran reason=%s notifications_deleted=%s tasks_deleted=%s group_chat_deleted=%s shared_links_deleted=%s",
         reason,
         notifications_result.deleted_count,
         tasks_result.deleted_count,
+        group_chat_result.deleted_count,
+        shared_links_result.deleted_count,
     )
     return summary
+
+
+def expire_at_after_days(days):
+    return utc_now() + timedelta(days=days)
+
+
+def is_valid_external_url(value):
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def fetch_recent_group_messages(limit=GROUP_CHAT_FETCH_LIMIT):
+    now_utc = utc_now()
+    messages = list(
+        group_chat_col.find({"expires_at": {"$gt": now_utc}})
+        .sort("created_at", -1)
+        .limit(limit)
+    )
+    messages.reverse()
+    return messages
+
+
+def fetch_recent_shared_links(limit=SHARED_LINK_FETCH_LIMIT):
+    now_utc = utc_now()
+    return list(
+        shared_links_col.find({"expires_at": {"$gt": now_utc}})
+        .sort("created_at", -1)
+        .limit(limit)
+    )
+
+
+def annotate_group_messages(messages):
+    related_ids = {
+        safe_object_id(message.get("author_id"))
+        for message in messages
+        if safe_object_id(message.get("author_id"))
+    }
+    users_by_id = {
+        str(user["_id"]): merged_user_defaults(user)
+        for user in users_col.find(
+            {"_id": {"$in": list(related_ids)}},
+            {"username": 1, "profile_picture_url": 1},
+        )
+    }
+    for message in messages:
+        author = users_by_id.get(message.get("author_id"))
+        message["author_name"] = author["username"] if author else "Unknown"
+        message["author_avatar"] = author.get("profile_picture_url", "") if author else ""
+    return messages
+
+
+def serialize_group_message(message):
+    return {
+        "id": str(message["_id"]),
+        "author_id": message.get("author_id"),
+        "author_name": message.get("author_name", "Unknown"),
+        "author_avatar": message.get("author_avatar", ""),
+        "message": message.get("message", ""),
+        "created_at": message["created_at"].isoformat() if message.get("created_at") else None,
+        "created_at_label": (
+            message["created_at"].strftime("%b %d, %I:%M %p")
+            if message.get("created_at")
+            else ""
+        ),
+        "expires_at_label": (
+            message["expires_at"].strftime("%b %d") if message.get("expires_at") else ""
+        ),
+    }
+
+
+def annotate_shared_links(links):
+    related_ids = {
+        safe_object_id(link.get("author_id"))
+        for link in links
+        if safe_object_id(link.get("author_id"))
+    }
+    users_by_id = {
+        str(user["_id"]): merged_user_defaults(user)
+        for user in users_col.find(
+            {"_id": {"$in": list(related_ids)}},
+            {"username": 1},
+        )
+    }
+    for link in links:
+        author = users_by_id.get(link.get("author_id"))
+        link["author_name"] = author["username"] if author else "Unknown"
+    return links
 
 
 def bootstrap_existing_users():
@@ -969,6 +1083,8 @@ def tasks():
     available = annotate_tasks(
         list(tasks_col.find({"status": "open", "giver_id": {"$ne": uid}}).sort("created_at", -1))
     )
+    group_messages = annotate_group_messages(fetch_recent_group_messages())
+    shared_links = annotate_shared_links(fetch_recent_shared_links())
 
     return render_template(
         "tasks.html",
@@ -977,6 +1093,9 @@ def tasks():
         in_progress=in_progress,
         completed=completed,
         available=available,
+        group_messages=group_messages,
+        shared_links=shared_links,
+        ephemeral_retention_days=EPHEMERAL_CONTENT_RETENTION_DAYS,
     )
 
 
@@ -1184,6 +1303,111 @@ def delete_task(task_id):
         flash("Task deleted.", "info")
 
     return redirect(url_for("tasks"))
+
+
+@app.route("/group-chat", methods=["POST"])
+@login_required
+def post_group_message():
+    user = current_user()
+    message = request.form.get("message", "").strip()
+
+    if not message:
+        flash("Group chat message cannot be empty.", "error")
+    elif len(message) > 500:
+        flash("Group chat message must be 500 characters or less.", "error")
+    else:
+        group_chat_col.insert_one(
+            {
+                "author_id": str(user["_id"]),
+                "message": message,
+                "created_at": utc_now(),
+                "expires_at": expire_at_after_days(EPHEMERAL_CONTENT_RETENTION_DAYS),
+            }
+        )
+        flash(
+            f"Message posted to group chat. It will disappear in {EPHEMERAL_CONTENT_RETENTION_DAYS} days.",
+            "success",
+        )
+
+    return redirect(url_for("tasks", _anchor="team-space"))
+
+
+@app.route("/api/group-chat/messages", methods=["GET"])
+@login_required
+def group_chat_messages_api():
+    messages = annotate_group_messages(fetch_recent_group_messages())
+    return jsonify(
+        {
+            "ok": True,
+            "messages": [serialize_group_message(message) for message in messages],
+        }
+    )
+
+
+@app.route("/api/group-chat/messages", methods=["POST"])
+@login_required
+def post_group_message_api():
+    user = current_user()
+    payload = request.get_json(silent=True) or {}
+    message = (payload.get("message") or "").strip()
+
+    if not message:
+        return jsonify({"ok": False, "error": "Group chat message cannot be empty."}), 400
+    if len(message) > 500:
+        return (
+            jsonify({"ok": False, "error": "Group chat message must be 500 characters or less."}),
+            400,
+        )
+
+    created_at = utc_now()
+    document = {
+        "author_id": str(user["_id"]),
+        "message": message,
+        "created_at": created_at,
+        "expires_at": created_at + timedelta(days=EPHEMERAL_CONTENT_RETENTION_DAYS),
+    }
+    result = group_chat_col.insert_one(document)
+    document["_id"] = result.inserted_id
+    document["author_name"] = user["username"]
+    document["author_avatar"] = user.get("profile_picture_url", "")
+    return jsonify({"ok": True, "message": serialize_group_message(document)})
+
+
+@app.route("/links", methods=["POST"])
+@login_required
+def create_shared_link():
+    user = current_user()
+    title = request.form.get("title", "").strip()
+    url = request.form.get("url", "").strip()
+    note = request.form.get("note", "").strip()
+
+    if not title:
+        flash("Link title is required.", "error")
+    elif len(title) > 100:
+        flash("Link title must be 100 characters or less.", "error")
+    elif not url:
+        flash("Link URL is required.", "error")
+    elif not is_valid_external_url(url):
+        flash("Please enter a valid http or https link.", "error")
+    elif len(note) > 240:
+        flash("Link note must be 240 characters or less.", "error")
+    else:
+        shared_links_col.insert_one(
+            {
+                "author_id": str(user["_id"]),
+                "title": title,
+                "url": url,
+                "note": note,
+                "created_at": utc_now(),
+                "expires_at": expire_at_after_days(EPHEMERAL_CONTENT_RETENTION_DAYS),
+            }
+        )
+        flash(
+            f"Link shared successfully. It will disappear in {EPHEMERAL_CONTENT_RETENTION_DAYS} days.",
+            "success",
+        )
+
+    return redirect(url_for("tasks", _anchor="team-space"))
 
 
 @app.route("/notifications/read", methods=["POST"])
